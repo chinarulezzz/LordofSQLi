@@ -3,6 +3,8 @@ Lord of SQLInjection
 
 https://los.rubiya.kr/
 
+Lord of SQL Injection Wargame Solutions.
+
 ---
 
 ### Full list of tasks:
